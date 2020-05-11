@@ -5,6 +5,7 @@ import pandas as pd
 from math import sin, cos
 
 pg.init()
+
 clock = pg.time.Clock()
 pg.font.init()
 assetdir = 'assets/'
@@ -14,11 +15,13 @@ pg.mixer.init()
 pg.mixer.music.load('music.mp3')
 pg.mixer.music.play()
 
-pewsound = pg.mixer.Sound('pew.wav')
+pewsound   = pg.mixer.Sound('pew.wav')
+diesound   = pg.mixer.Sound('die.wav')
+owsound    = pg.mixer.Sound('ow.wav')
+smashsound = pg.mixer.Sound('smash.wav')
 pewsound.set_volume(0.4)
-diesound = pg.mixer.Sound('die.wav')
-owsound = pg.mixer.Sound('ow.wav')
 owsound.set_volume(0.3)
+smashsound.set_volume(0.5)
 
 size = width, height = 800, 600
 speed = [1, 1] # x, y speed
@@ -28,15 +31,16 @@ white = 255, 255, 255
 red = 255, 0, 0
 
 screen = pg.display.set_mode(size)
-
+pg.display.set_caption("Shitty Space Invaders")
 # text
 title       = pg.image.load("TitleCard.png")
 titlerect   = title.get_rect()
 mohtext     = pg.font.SysFont('Arial', 30).render('Code by MOHAMMED', True, white)
 keegtext    = pg.font.SysFont('Arial', 30).render('Art by KEEGAN', True, white)
 spacetocont = pg.font.SysFont('Arial', 20).render('Press space to start...', True, white)
-spacetoplay = pg.font.SysFont('Arial', 20).render('Press space to play again...', True, white)
+entertoplay = pg.font.SysFont('Arial', 20).render('Press enter to play again...', True, white)
 healthtext  = pg.font.SysFont('Arial', 20).render('Health: ', True, white)
+timetext    = pg.font.SysFont('Arial', 20).render('Time: ', True, white)
 losetext    = pg.font.SysFont('Arial Bold', 100).render('YOU LOSE BITCH', True, white)
 wintext     = pg.font.SysFont('Arial Bold', 100).render('YOU WIN!!!!', True, white)
 
@@ -51,7 +55,9 @@ pg.display.flip()
 bulletspeed = -0.5
 aliensx, aliensy = 10, 5
 alienoffset = (150, 50)
-alienspacing = 10
+alienspacing = (10, 10)
+numbarriers = 3
+barrierspacing = 250
 bulletcount = 0
 playerhealth = 3
 
@@ -93,14 +99,15 @@ def setup():
 			rows.append(row)
 
 		if 'barrier' in row['name']:
-			row['name']   = 'Barrier' + str(1)
-			row['type']   = 'barrier'
-			row['img']    = pg.image.load(assetdir + 'barrier6.png')
-			row['rect']   = row['img'].get_rect()
-			row['rect'].x = width/2
-			row['rect'].y = height-200
-			row['health'] = 6
-			rows.append(row)
+			for b in range(0, numbarriers):
+				row           = { 'name': 'Barrier' + str(int(b)) }
+				row['type']   = 'barrier'
+				row['img']    = pg.image.load(assetdir + 'barrier6.png')
+				row['rect']   = row['img'].get_rect()
+				row['rect'].x = 150 + b*barrierspacing
+				row['rect'].y = height-200
+				row['health'] = 6
+				rows.append(row)
 
 		# if row['name'] == 'Alien1':
 		# 	row['type'] = 'alien'
@@ -110,10 +117,11 @@ def setup():
 				for k in range(0, aliensy):
 					row = { 'name': asset.split('.')[0] + str(j) + str(k)}
 					row['type']   = 'alien'
-					row['img']    = pg.image.load(assetdir + asset)
+					imgs = [assetdir + 'Alien2.png']
+					row['img']    = pg.image.load(random.choice(imgs))
 					row['rect']   = row['img'].get_rect()
-					row['rect'].x = j*(alienspacing+row['rect'].width) + alienoffset[0]
-					row['rect'].y = k*(alienspacing+row['rect'].height) + alienoffset[1]
+					row['rect'].x = j*(alienspacing[0]+row['rect'].width)  + alienoffset[0]
+					row['rect'].y = k*(alienspacing[1]+row['rect'].height) + alienoffset[1]
 					row['posx']   = j
 					row['posy']   = k
 					row['xo']     = row['rect'].x
@@ -140,16 +148,14 @@ def checkcollision(a, b):
 while True:
 	dt = clock.tick(60)
 	t += dt
+	timescore  = pg.font.SysFont('Arial', 20).render(str(int(t/100)), True, white)
+
 	for event in pg.event.get():
 		if event.type == pg.QUIT: sys.exit()
 
 	if started and not lost and not won: # main game
 		# player (left) paddle
 		keys = pg.key.get_pressed()
-		if keys[pg.K_w]:
-			won = True
-		if keys[pg.K_r]:
-			lost = True
 		if keys[pg.K_LEFT]:
 			assets.loc['Player', 'rect'] = assets.loc['Player', 'rect'].move(-1*dt, 0)
 		if keys[pg.K_RIGHT]:
@@ -177,18 +183,23 @@ while True:
 				assets = assets.drop(key)
 
 		# gyrate aliens
+		aliensleft = len(assets[assets.type == 'alien'])
 		for ai, alien in assets.loc[assets.type == 'alien'].iterrows():
+			period = 0.001
+			# amplitude = 5000 / (aliensleft) # 100
+			amplitude = 100 # 100
+			s = 1#(aliensx*aliensy) / aliensleft
 			if alien['posy'] % 2 == 0:
-				dx = 100*cos(0.001*t)
-				assets.loc[ai, 'rect'].x = assets.loc[ai, 'xo'] + dx
+				dx = amplitude*cos(period*t)
+				assets.loc[ai, 'rect'].x = assets.loc[ai, 'xo'] + s*dx
 			if alien['posy'] % 2 == 1:
-				dx = 100*sin(0.001*t)
-				assets.loc[ai, 'rect'].x = assets.loc[ai, 'xo'] + dx
+				dx = amplitude*sin(period*t)
+				assets.loc[ai, 'rect'].x = assets.loc[ai, 'xo'] + s*dx
 
 		# aliens shoot
+		pshoot = 0.001 + 0.019/aliensleft # 0.001
 		for ai, alien in assets.loc[assets.type == 'alien'].iterrows():
 			# each alien has a `pshoot` percent chance of shooting per tick
-			pshoot = 0.01 # 0.001
 			if random.uniform(0, 1) < pshoot:
 				pewsound.play()
 				row = { 'name': 'alien_bullet' + str(bulletcount) }
@@ -204,87 +215,97 @@ while True:
 				bulletcount += 1
 				assets = pd.concat([assets, df])
 
-		# check collision, super slow lol
+		# bullet collisions
 		if len(assets[assets.type == 'wpn']) > 1:
-			for ai, alien in assets.loc[assets.type == 'alien'].iterrows():
-				for bi, bullet in assets[assets.type == 'wpn'].iterrows():
-					# if checkcollision(bullet['rect'], alien['rect']) and 'alien' not in bi:
-					if bullet['rect'].colliderect(alien['rect']) and 'alien' not in bi:
-						diesound.play()
+			for bi, bullet in assets[assets.type == 'wpn'].iterrows():
+				alienrects = assets.loc[assets.type == 'alien']['rect']
+				collisioni = bullet['rect'].collidelist(alienrects)
+
+				if collisioni > -1 and 'alien' not in bi:
+					ai = assets.index[assets.type == 'alien'].tolist()[collisioni]
+					diesound.play()
+					try:
+						assets = assets.drop(ai)
+						assets = assets.drop(bi)
+					except KeyError:
+						pass
+
+					if len(assets[assets.type == 'alien']) <= 0:
+						won = True
+					continue
+
+				if assets.loc['Player', 'rect'].colliderect(bullet['rect']) and 'alien' in bi:
+					owsound.play()
+					assets.loc['Player', 'health'] -= 1
+					try:
+						assets = assets.drop(bi)
+						assets = assets.drop('health' + str(int(assets.loc['Player', 'health'])))
+					except KeyError:
+						pass
+					if assets.loc['Player', 'health'] <= 0:
+						lost = True
+					continue
+
+				for bari, barrier in assets[assets.type == 'barrier'].iterrows():
+					if barrier['rect'].colliderect(bullet['rect']):
 						try:
-							assets = assets.drop(ai)
 							assets = assets.drop(bi)
 						except KeyError:
 							pass
 
-						if len(assets[assets.type == 'alien']) <= 0:
-							won = True
-
-					if assets.loc['Player', 'rect'].colliderect(bullet['rect']) and 'alien' in bi:
-						owsound.play()
-						assets.loc['Player', 'health'] -= 1
-						try:
-							assets = assets.drop(bi)
-							assets = assets.drop('health' + str(int(assets.loc['Player', 'health'])))
-						except KeyError:
-							pass
-						if assets.loc['Player', 'health'] <= 0:
-							lost = True
-
-					for bari, barrier in assets[assets.type == 'barrier'].iterrows():
-						if barrier['rect'].colliderect(bullet['rect']) and 'alien' in bi:
-							owsound.play()
-							try:
-								assets = assets.drop(bi)
-							except KeyError:
-								pass
+						if 'alien' in bi:
+							smashsound.play()
 							assets.loc[bari, 'health'] -= 1
 							if assets.loc[bari, 'health'] > 0:
 								health = assets.loc[bari, 'health']
 								assets.loc[bari, 'img'] = pg.image.load(assetdir + extradir + 'barrier{}.png'.format(int(health)))
-								assets.loc[bari, 'rect'] = assets.loc[bari, 'img'].get_rect()
-								assets.loc[bari, 'rect'].x = width/2
-								assets.loc[bari, 'rect'].y = height-200
 							else:
 								assets = assets.drop(bari)
 
 		# draw
 		screen.fill(black)
 		screen.blit(healthtext, (0, height-25))
+		screen.blit(timetext, (650, height-25))
+		screen.blit(timescore, (700, height-25))
 		for i, asset in assets.iterrows():
 			screen.blit(asset['img'], asset['rect'])
 		pg.display.flip()
+
 	elif not started and not won and not lost: # title
 		keys = pg.key.get_pressed()
 		if keys[pg.K_SPACE]:
 			started = True
+
 	elif started and lost and not won: # lose screen
 		pg.mixer.music.stop()
 		screen.blit(losetext, (width/2-300, 300))
-		screen.blit(spacetoplay, (width/2-200, height/2+150))
+		screen.blit(entertoplay, (width/2-200, height/2+150))
 
 		pg.display.flip()
 
 		keys = pg.key.get_pressed()
 		assets = setup()
 		assets = assets.set_index('name')
-		if keys[pg.K_SPACE]:
+		if keys[pg.K_RETURN]:
 			pg.mixer.music.rewind()
 			pg.mixer.music.play()
-			lost    = False
-			won     = False
-			started = False
+			t            = 0
+			lastbullet_t = 0
+			lost         = False
+			won          = False
+
 	elif started and won and not lost: # win screen
 		screen.blit(wintext, (width/2-300, 300))
-		screen.blit(spacetoplay, (width/2-200, height/2+150))
+		screen.blit(entertoplay, (width/2-200, height/2+150))
 		pg.display.flip()
 
 		keys = pg.key.get_pressed()
 		assets = setup()
 		assets = assets.set_index('name')
-		if keys[pg.K_SPACE]:
+		if keys[pg.K_RETURN]:
 			pg.mixer.music.rewind()
 			pg.mixer.music.play()
-			lost    = False
-			won     = False
-			started = False
+			t            = 0
+			lastbullet_t = 0
+			lost         = False
+			won          = False
